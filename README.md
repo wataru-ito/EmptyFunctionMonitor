@@ -34,3 +34,7 @@
 Tips:<br>
 * ダブルクリックで該当の箇所を開きます
 * 一覧画面でDeleteを押すと項目を消せます
+
+
+# License
+The MIT License
