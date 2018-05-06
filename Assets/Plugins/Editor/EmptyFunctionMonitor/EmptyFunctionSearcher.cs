@@ -133,7 +133,7 @@ namespace EmptyFunctionMonitor
 				for (int i = 0; i < scripts.Length; ++i)
 				{
 					if (EditorUtility.DisplayCancelableProgressBar("空関数検索中",
-						string.Format("{0}/{1}\n\n{2}", i, scripts.Length, scripts[i]),
+						string.Format("{0}/{1} {2}", i, scripts.Length, scripts[i]),
 						i / (float)scripts.Length))
 					{
 						break;
