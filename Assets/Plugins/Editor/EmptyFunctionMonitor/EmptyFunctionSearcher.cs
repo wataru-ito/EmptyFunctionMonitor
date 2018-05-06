@@ -12,11 +12,14 @@ namespace EmptyFunctionMonitor
 	/// </summary>
 	internal class EmptyFunctionSearcher : EditorWindow
 	{
+		readonly GUIContent kContainsVirtualMethodContent = new GUIContent("仮想関数", "仮想関数も対象として含む");
+
 		string _directoryPath;
 		bool _awakeFlg;
 		bool _startFlg = true;
 		bool _updateFlg = true;
 		bool _lateupdateFlg;
+		bool _containsVirtualMethod = false;
 
 		List<EmptyFunctionInfo> _result;
 		System.Action<List<EmptyFunctionInfo>> _callback;
@@ -81,6 +84,8 @@ namespace EmptyFunctionMonitor
 			_startFlg = EditorGUILayout.Toggle("Start", _startFlg);
 			_updateFlg = EditorGUILayout.Toggle("Update", _updateFlg);
 			_lateupdateFlg = EditorGUILayout.Toggle("LateUpdate", _lateupdateFlg);
+			EditorGUILayout.Space();
+			_containsVirtualMethod = EditorGUILayout.Toggle(kContainsVirtualMethodContent, _containsVirtualMethod);
 
 			EditorGUILayout.Space();
 
@@ -166,28 +171,36 @@ namespace EmptyFunctionMonitor
 
 			for (var match = regex.Match(code); match.Success; match = match.NextMatch())
 			{
-				// 直前にvirtualが付いてたら無視
-				// > 正規表現でvirtualなしがうまく作れなかったのでこうする…
-				var index = match.Index;
-				if (index > 7 &&
-					code[index - 7] == 'v' &&
-					code[index - 6] == 'i' &&
-					code[index - 5] == 'r' &&
-					code[index - 4] == 't' &&
-					code[index - 3] == 'u' &&
-					code[index - 2] == 'a' &&
-					code[index - 1] == 'l')
+				// 仮想関数チェック
+				// > 正規表現だけではうまく作れなかったのでこうする…
+				if (!_containsVirtualMethod && 
+					(CheckAccessModifier(ref code, match.Index, "virtual") || 
+					CheckAccessModifier(ref code, match.Index, "override")))
 				{
 					continue;
 				}
 
 				var info = new EmptyFunctionInfo(
 					filePath.Substring(Application.dataPath.Length - 6),
-					GetLineCount(ref code, index),
+					GetLineCount(ref code, match.Index),
 					GetFuncName(match.Value));
 
 				_result.Add(info);
 			}
+		}
+
+		static bool CheckAccessModifier(ref string code, int index, string keyword)
+		{
+			if (index < keyword.Length) return false;
+			
+			for (int i = 0; i < keyword.Length; ++i)
+			{
+				if (code[index - keyword.Length + i] != keyword[i])
+				{
+					return false;
+				}
+			}
+			return true;
 		}
 
 		static string GetFuncName(string matchValue)
