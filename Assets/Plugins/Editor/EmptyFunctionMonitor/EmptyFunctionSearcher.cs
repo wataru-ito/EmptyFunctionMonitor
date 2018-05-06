@@ -24,6 +24,7 @@ namespace EmptyFunctionMonitor
 		}
 
 
+		string _directoryPath;
 		bool _awakeFlg;
 		bool _startFlg = true;
 		bool _updateFlg = true;
@@ -58,6 +59,8 @@ namespace EmptyFunctionMonitor
 		void OnEnable()
 		{
 			titleContent = new GUIContent("空関数検索");
+
+			_directoryPath = Application.dataPath;
 		}
 
 		void OnLostFocus()
@@ -71,6 +74,21 @@ namespace EmptyFunctionMonitor
 
 		void OnGUI()
 		{
+			EditorGUIUtility.labelWidth = 100f;
+
+			using (new EditorGUILayout.HorizontalScope())
+			{
+				EditorGUILayout.LabelField("検索フォルダ", _directoryPath.Substring(Application.dataPath.Length - 6));
+				if (GUILayout.Button("変更", GUILayout.Width(32)))
+				{
+					var path = EditorUtility.OpenFolderPanel("検索フォルダ", _directoryPath, string.Empty);
+					if (!string.IsNullOrEmpty(path) && path.StartsWith(Application.dataPath))
+					{
+						_directoryPath = path;
+					}
+				}
+			}
+
 			_awakeFlg = EditorGUILayout.Toggle("Awake", _awakeFlg);
 			_startFlg = EditorGUILayout.Toggle("Start", _startFlg);
 			_updateFlg = EditorGUILayout.Toggle("Update", _updateFlg);
@@ -78,7 +96,7 @@ namespace EmptyFunctionMonitor
 
 			EditorGUILayout.Space();
 
-			GUI.enabled = _awakeFlg || _startFlg || _updateFlg || _lateupdateFlg;
+			GUI.enabled = Directory.Exists(_directoryPath) && (_awakeFlg || _startFlg || _updateFlg || _lateupdateFlg);
 			if (GUILayout.Button("実行"))
 			{
 				Search();
