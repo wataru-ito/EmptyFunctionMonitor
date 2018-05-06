@@ -12,18 +12,6 @@ namespace EmptyFunctionMonitor
 	/// </summary>
 	internal class EmptyFunctionSearcher : EditorWindow
 	{
-		/// <summary>
-		/// Matchからヒットした関数名情報を取り出すより[FuncName:Regex]のペアで管理した方が楽なので…
-		/// > でも速度的にはRegex一つにした方が早いんだろうなぁ…
-		/// > あれば便利かなってfuncName表示してるけどそもそもいる？
-		/// </summary>
-		struct RegexInfo
-		{
-			public string funcName;
-			public Regex regex;
-		}
-
-
 		string _directoryPath;
 		bool _awakeFlg;
 		bool _startFlg = true;
@@ -109,23 +97,17 @@ namespace EmptyFunctionMonitor
 		// regex
 		//------------------------------------------------------
 
-		List<RegexInfo> CreateRegex()
+		Regex CreateRegex()
 		{
-			var regexList = new List<RegexInfo>();
-			if (_awakeFlg) regexList.Add(CreateRegex("Awake"));
-			if (_startFlg) regexList.Add(CreateRegex("Start"));
-			if (_updateFlg) regexList.Add(CreateRegex("Update"));
-			if (_lateupdateFlg) regexList.Add(CreateRegex("LateUpdate"));
-			return regexList;
-		}
+			var pattern = new StringBuilder();
+			if (_awakeFlg) AppendFunction(pattern, "Awake");
+			if (_startFlg) AppendFunction(pattern, "Start");
+			if (_updateFlg) AppendFunction(pattern, "Update");
+			if (_lateupdateFlg) AppendFunction(pattern, "LateUpdate");
 
-		RegexInfo CreateRegex(string funcName)
-		{
-			var info = new RegexInfo();
-			info.funcName = funcName;
-			// \{\s*\} をformatの中に入れちゃうと警告が出るので分けてる
-			info.regex = new Regex(string.Format(@"[ \t]*void\s+{0}\s*\(\s*\)\s*", funcName) + @"\{\s*\}");
-			return info;
+			pattern.Insert(0, @"[ \t]*void\s+(");
+			pattern.Append(@")\s*\(\s*\)\s*\{\s*\}");
+			return new Regex(pattern.ToString());
 		}
 		
 		static void AppendFunction(StringBuilder sb, string functionName)
@@ -143,10 +125,12 @@ namespace EmptyFunctionMonitor
 		{
 			_result = new List<EmptyFunctionInfo>();
 
-			var regexList = CreateRegex();
+			var regex = CreateRegex();
 
 			try
 			{
+				var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
 				var scripts = Directory.GetFiles(Application.dataPath, "*.cs", SearchOption.AllDirectories);
 				for (int i = 0; i < scripts.Length; ++i)
 				{
@@ -157,8 +141,11 @@ namespace EmptyFunctionMonitor
 						break;
 					}
 
-					Search(scripts[i], regexList);
+					Search(scripts[i], regex);
 				}
+
+				stopwatch.Stop();
+				Debug.LogFormat("EmptyFunctionSearch : {0}ms", stopwatch.ElapsedMilliseconds);
 			}
 			finally
 			{
@@ -173,38 +160,42 @@ namespace EmptyFunctionMonitor
 			Close();
 		}
 
-		void Search(string filePath, List<RegexInfo> regexList)
+		void Search(string filePath, Regex regex)
 		{
 			var code = File.ReadAllText(filePath);
 
-			foreach (var regexInfo in regexList)
+			for (var match = regex.Match(code); match.Success; match = match.NextMatch())
 			{
-				var match = regexInfo.regex.Match(code);
-				if (match.Success)
+				// 直前にvirtualが付いてたら無視
+				// > 正規表現でvirtualなしがうまく作れなかったのでこうする…
+				var index = match.Index;
+				if (index > 7 &&
+					code[index - 7] == 'v' &&
+					code[index - 6] == 'i' &&
+					code[index - 5] == 'r' &&
+					code[index - 4] == 't' &&
+					code[index - 3] == 'u' &&
+					code[index - 2] == 'a' &&
+					code[index - 1] == 'l')
 				{
-					// 直前にvirtualが付いてたら無視
-					// > 正規表現でvirtualなしがうまく作れなかったのでこうする…
-					var index = match.Index;
-					if (index > 7 &&
-						code[index - 7] == 'v' &&
-						code[index - 6] == 'i' &&
-						code[index - 5] == 'r' &&
-						code[index - 4] == 't' &&
-						code[index - 3] == 'u' &&
-						code[index - 2] == 'a' &&
-						code[index - 1] == 'l')
-					{
-						continue;
-					}
-
-					var info = new EmptyFunctionInfo(
-						filePath.Substring(Application.dataPath.Length - 6),
-						GetLineCount(ref code, index),
-						regexInfo.funcName);
-
-					_result.Add(info);
+					continue;
 				}
+
+				var info = new EmptyFunctionInfo(
+					filePath.Substring(Application.dataPath.Length - 6),
+					GetLineCount(ref code, index),
+					GetFuncName(match.Value));
+
+				_result.Add(info);
 			}
+		}
+
+		static string GetFuncName(string matchValue)
+		{
+			var m = Regex.Match(matchValue, @"void\s+\w+\s*\(");
+			return m.Success ?
+				m.Value.Substring(4, m.Value.Length - 5).Trim() :
+				matchValue;
 		}
 
 		static int GetLineCount(ref string code, int index)
